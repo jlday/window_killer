@@ -15,6 +15,7 @@
 ####################################################################################
 # Dependencies:
 # 		- pywin32 python library (http://sourceforge.net/projects/pywin32/)
+#		- psutil python library (http://code.google.com/p/psutil/) 
 ####################################################################################
 # Usage:
 Usage = '''
@@ -44,7 +45,7 @@ options:
 ####################################################################################
 # Imports:
 import sys, time, getopt, threading
-import win32gui, win32api, win32con, win32process
+import win32gui, win32api, win32con, win32process, psutil
 ####################################################################################
 # Global Variables:
 buttons = ["ok", "yes", "try", "next", "continue", "open"]
@@ -52,8 +53,44 @@ sleep = 1
 exact = False
 alwaysClose = True
 verbose = False
+
+# Not used as a setting by Main:
+timeout = 3
 ####################################################################################
 # Function:
+
+# Iterates through the active windows looking for windows belonging to the target
+# process (PID specified by lparam) and sends the WM_CLOSE message to any 
+# corisponding window objects.
+def FindMainAndClose(hwnd, lparam):
+	if win32process.GetWindowThreadProcessId(hwnd)[1] == lparam:
+		try:
+			win32api.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+		except:
+			pass
+
+# Takes the PID of a process to kill.  Attempts to first close the process
+# by sending WM_CLOSE messages to the main window, if unsuccessful, it will
+# just kill the process.  returns True if the process was successfully closed
+# with the WM_CLOSE message
+def CloseMain(PID):
+	global timeout
+	global sleep
+	
+	proc = psutil.Process(PID)
+	count = 0
+
+	try:
+		while proc.status != psutil.STATUS_DEAD and count < timeout:
+			win32gui.EnumWindows(FindMainAndClose, proc.pid)
+			time.sleep(sleep)
+			count += sleep
+		if proc.status != psutil.STATUS_DEAD:
+			proc.kill()
+			return False
+	except psutil.error.NoSuchProcess:
+		pass
+	return True
 
 # Callback function used by EnumChildWindows
 #  		Searches through each window's text for the specified key words.
